@@ -4,7 +4,6 @@ import pandas as pd
 
 
 class TextEncoder:
-
     """
     Class for encoding text into vectors using common encoding methods.
     Attributes
@@ -15,9 +14,11 @@ class TextEncoder:
 
     delimiter = " "
 
+    sentence_delimiter = "\?”|\.”|\”!|\?\"|.\"|\!\"|[.?!]"
+
     def __init__(self, text_arg):
         self.text = TextEncoder.clean_text(text_arg).lower()
-        self.sentences = self.get_sentences()
+        self.sentences = self.get_sentences(self.text, self.sentence_delimiter)
         self.words = self.get_words()
         self.data_corpus = pd.Series(self.words, dtype=pd.Int64Dtype).unique()
 
@@ -43,16 +44,21 @@ class TextEncoder:
                     words.append(word)
         return words
 
-    def get_sentences(self):
+    @staticmethod
+    def get_sentences(text, sentence_delimiter):
         """
         Gets the sentences from the text class attribute; sentences split on '?', '.', and '!'.
         :return: A list containing the individual sentences
         """
-        sentences = re.split("[.!?]", self.text)
+        sentences = re.split(sentence_delimiter, text)
         for index in range(len(sentences)):
             sentences[index] = sentences[index].strip()
         sentences.pop(-1)
         return sentences
+
+    def get_sentence_punctuation(self):
+        punctuation = re.findall(self.sentence_delimiter, self.text)
+        return punctuation
 
     def get_bag_of_words(self, method='binary'):
         """
@@ -70,22 +76,24 @@ class TextEncoder:
             vectors.loc[sentence_index] = vector
         return vectors
 
-    def get_tf_idf(self):
+    def get_tf_idf(self, sentences=None):
         """
         Uses the Term Frequency - Inverse Document Frequency methodology to encode the text
         :return: a pandas DataFrame containing the encoded text
         """
-        vectors = pd.DataFrame(index=range(len(self.sentences)), columns=[self.data_corpus], dtype=float)
+        if sentences is None:
+            sentences = self.sentences
+        vectors = pd.DataFrame(index=range(len(sentences)), columns=[self.data_corpus], dtype=float)
         idf = pd.Series(index=vectors.columns, dtype=float)
         total_words = len(self.words)
         for word in self.data_corpus:
             word_counter = 0
-            for sentence in self.sentences:
+            for sentence in sentences:
                 if word in sentence:
                     word_counter += 1
             idf[word] = math.log(total_words / word_counter)
-        for sentence_index in range(len(self.sentences)):
-            sentence = self.sentences[sentence_index]
+        for sentence_index in range(len(sentences)):
+            sentence = sentences[sentence_index]
             vector = pd.Series(index=vectors.columns, dtype=float)
             sentence_word_count = len(sentence)
             for word in sentence.split(self.delimiter):
@@ -94,6 +102,7 @@ class TextEncoder:
                     tf = word_count / sentence_word_count
                     vector[word] = tf * idf[word]
             vectors.loc[sentence_index] = vector
+        return vectors
 
     def get_index_encoding(self):
         """
@@ -114,3 +123,4 @@ class TextEncoder:
             for word_index in range(len(sentence_words)):
                 vector[word_index] = corpus_list.index(sentence_words[word_index])
             vectors.loc[sentence_index] = vector
+        return vectors
