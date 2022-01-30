@@ -14,22 +14,31 @@ class TextEncoder:
 
     delimiter = " "
 
-    sentence_delimiter = "\?”|\.”|\”!|\?\"|.\"|\!\"|[.?!]"
+    sentence_delimiter = "\?”|\.”|\”!|\?\"|.\"|\!\"|[.?!]+"
 
-    def __init__(self, text_arg):
-        self.text = TextEncoder.clean_text(text_arg).lower()
+    word_delimiter = "\?”|\.”|\”!|\?\"|.\"|\!\"|[.?! ]+"
+
+    def __init__(self, text_arg, clean_regex=None, lower=True):
+        if clean_regex is not None:
+            self.text = TextEncoder.clean_text(text_arg, clean_regex)
+        else:
+            self.text = TextEncoder.clean_text(text_arg)
+        if lower:
+            self.text = self.text.lower()
         self.sentences = self.get_sentences(self.text, self.sentence_delimiter)
         self.words = self.get_words()
         self.data_corpus = pd.Series(self.words, dtype=pd.Int64Dtype).unique()
 
     @staticmethod
-    def clean_text(text_arg):
+    def clean_text(text_arg, regex='[A-Z a-z.?!\'’]+'):
         """
         Cleans the text by removing all characters outside of end-of-sentence punctuation and roman alphabet characters
+        :param regex: optional regex expression to clean the text with
         :param text_arg: the text to be cleaned
         :return: a cleaned copy of the string
         """
-        cleaned_text = re.match('([A-Z a-z.?!])+', text_arg).string
+        matches = re.findall(regex, text_arg)
+        cleaned_text = "".join(matches).strip().replace("  ", " ")
         return cleaned_text
 
     def get_words(self):
@@ -37,11 +46,7 @@ class TextEncoder:
         Gets an array of unique words from the sentence class attribute
         :return: an array of the unique words
         """
-        words = []
-        for sentence in self.sentences:
-            for word in sentence.split(self.delimiter):
-                if word is not None and word != "":
-                    words.append(word)
+        words = re.split(self.word_delimiter, self.text)
         return words
 
     @staticmethod
@@ -53,7 +58,8 @@ class TextEncoder:
         sentences = re.split(sentence_delimiter, text)
         for index in range(len(sentences)):
             sentences[index] = sentences[index].strip()
-        sentences.pop(-1)
+        if sentences[-1] == '':
+            sentences.pop(-1)
         return sentences
 
     def get_sentence_punctuation(self):
@@ -73,7 +79,7 @@ class TextEncoder:
             for word in sentence.split(self.delimiter):
                 if vector[word] == 0 or method != 'binary':
                     vector[word] += 1
-            vectors.loc[sentence_index] = vector
+            vectors.loc[sentence_index, :] = vector
         return vectors
 
     def get_tf_idf(self, sentences=None):
@@ -93,7 +99,7 @@ class TextEncoder:
                     word_counter += 1
             idf[word] = math.log(total_words / word_counter)
         for sentence_index in range(len(sentences)):
-            sentence = sentences[sentence_index]
+            sentence = sentences[sentence_index].strip()
             vector = pd.Series(index=vectors.columns, dtype=float)
             sentence_word_count = len(sentence)
             for word in sentence.split(self.delimiter):

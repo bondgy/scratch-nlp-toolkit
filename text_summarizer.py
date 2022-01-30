@@ -1,18 +1,26 @@
-import nltk
-from nltk.corpus import stopwords
+import re
+import pandas as pd
 from text_encoder import TextEncoder
 from collections import defaultdict
-nltk.download('stopwords')
 
 
 class ExtractiveSummarizer:
     def __init__(self, text):
         self.encoder = TextEncoder(text)
-        self.original_sentences = TextEncoder.get_sentences(text, TextEncoder.sentence_delimiter)
-        stop_words = stopwords.words('english')
-        self.uncommon_words = list(filter(lambda word: word not in stop_words, self.encoder.words))
+        self.original_text = text
+        self.stop_words = ExtractiveSummarizer.get_stop_words()
+        self.uncommon_words = list(filter(lambda word: word not in self.stop_words, self.encoder.words))
         self.uncommon_sentences, self.total_uncommon_words = self.get_uncommon_sentences()
         self.punctuations = self.encoder.get_sentence_punctuation()
+
+    @staticmethod
+    def get_stop_words():
+        """
+        Thanks to jimmyjames177414 on github for the list. Gets the stop words provided by him.
+        :return: A list of stop words
+        """
+        with open("stop_words.txt", "r") as stop_words_file:
+            return stop_words_file.readline().split(",")
 
     def get_uncommon_sentences(self):
         uncommon_sentences = []
@@ -51,14 +59,48 @@ class ExtractiveSummarizer:
         summarized_text = self.get_summarized_sentences(sentence_ranks, len(self.encoder.sentences), sentence_amount)
         return summarized_text
 
+    def keywords_by_rake(self, keyword_number):
+        clean_text = " " + self.encoder.clean_text(self.original_text, '([A-Z a-z’/\'-]+)').lower() + " "
+        regex = "(?<= )(" + "|".join(self.stop_words) + ")(?= )"
+        candidates = re.split(regex, clean_text)
+        deletions = 0
+        for candidate_index in range(len(candidates)):
+            current_index = candidate_index - deletions
+            if candidates[current_index] == '' or candidates[current_index] == " " or candidates[current_index]\
+                    in self.stop_words:
+                candidates.pop(current_index)
+                deletions += 1
+            else:
+                candidates[current_index] = candidates[current_index].strip()
+        joined_candidates = ".".join(candidates).strip()
+        rake_encoder = TextEncoder(joined_candidates, '[A-Z a-z.?!\'’-]+')
+        frequencies = rake_encoder.get_bag_of_words('common')
+        co_frequencies = pd.DataFrame(index=frequencies.columns, columns=frequencies.columns).fillna(0)
+        for candidate in candidates:
+            words = candidate.split(" ")
+            for index_word in words:
+                for column_word in words:
+                    co_frequencies.at[index_word, column_word] = co_frequencies.loc[index_word, column_word] + 1
+        word_scores = pd.Series(index=co_frequencies.columns, dtype=float)
+        for column in word_scores.index:
+            score = co_frequencies[column].sum() / frequencies.loc[:, column].sum()
+            word_scores[column] = round(score, 2)
+        candidate_scores = pd.Series(index=candidates, dtype=float).fillna(0.0)
+        for candidate in candidate_scores.index:
+            for word in candidate.split(" "):
+                candidate_scores[candidate] += word_scores[word]
+        candidate_scores.sort_values(inplace=True, ascending=False)
+        return candidate_scores.index[0:keyword_number].values
+
     def get_summarized_sentences(self, sentence_ranks, sentences_length, sentence_amount):
+        original_sentences = TextEncoder.get_sentences(self.original_text, TextEncoder.sentence_delimiter)
         sentence_indices = list(range(sentences_length))
         sentence_ranks, sentence_indices = zip(*sorted(zip(sentence_ranks, sentence_indices)))
         summarized_text = ""
         total_sentences = sentence_amount if sentence_amount <= len(sentence_indices) else len(sentence_indices)
         for index in range(total_sentences):
             sentence_index = sentence_indices[index]
-            summarized_text += self.original_sentences[sentence_index] + self.punctuations[sentence_index] + " "
+            summarized_text += original_sentences[sentence_index] + self.punctuations[sentence_index] + " "
         return summarized_text.strip()
 
 
@@ -81,3 +123,4 @@ summarized_sentence_amount = 4
 summarizer = ExtractiveSummarizer(sample_text)
 print(summarizer.summarize_by_word_frequency(summarized_sentence_amount))
 print(summarizer.summarize_by_if_idf(summarized_sentence_amount))
+print(summarizer.keywords_by_rake(5))
