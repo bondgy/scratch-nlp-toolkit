@@ -1,6 +1,7 @@
 import math
 import re
 import pandas as pd
+import numpy as np
 
 
 class TextEncoder:
@@ -29,6 +30,34 @@ class TextEncoder:
         self.words = self.get_words()
         self.data_corpus = pd.Series(self.words, dtype=pd.Int64Dtype).unique()
 
+    def get_positional_encoding(self, sentences_length, word_per_sentence, embedding_length):
+        """
+        Creates a positional encoding vector from supplied text for a transformer/self-attention unit input
+        :param embedding_length: The length of the embedding
+        :param word_per_sentence: The maximum amount of words per sentence
+        :param sentences_length: The maximum amount of sentences
+        :return: a three dimensional numpy array containing the positional encoding
+        """
+        position_counter = 1
+        encoding = np.zeros((sentences_length, word_per_sentence, embedding_length))
+        embedding_vector = np.zeros((1, 1, embedding_length))
+        for embed_position in range(0, embedding_length, 1):
+            embedding_vector[0, 0, embed_position] = 10000 ** ((2 * (embed_position + 1)) / embedding_length)
+        for sentence_index in range(len(self.sentences)):
+            sentence = self.sentences[sentence_index]
+            sentence_split = sentence.split(TextEncoder.delimiter)
+            for word_index in range(len(sentence_split)):
+                embed_vector_copy = embedding_vector[0, 0, :].copy()
+                embed_vector_copy = position_counter / embed_vector_copy
+                if position_counter % 2 == 0:
+                    embed_vector_copy = np.sin(embed_vector_copy)
+                else:
+                    embed_vector_copy = np.cos(embed_vector_copy)
+                encoding[sentence_index: sentence_index + 1, word_index:word_index + 1, 0:embedding_length] =\
+                    embed_vector_copy
+                position_counter += 1
+        return encoding
+
     @staticmethod
     def clean_text(text_arg, regex='[A-Z a-z.?!\'’]+'):
         """
@@ -43,7 +72,7 @@ class TextEncoder:
 
     def get_words(self):
         """
-        Gets an array of unique words from the sentence class attribute
+        Gets an array of words from the sentence class attribute
         :return: an array of the unique words
         """
         words = re.split(self.word_delimiter, self.text)
