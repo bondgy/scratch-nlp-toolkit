@@ -101,10 +101,11 @@ class TextEncoder:
         :param method: string indicating which type of bag of words to use; possible values are binary or common.
         :return: a pandas DataFrame containing the vectors
         """
-        vectors = pd.DataFrame(index=range(len(self.sentences)), columns=[self.data_corpus], dtype=int)
+        vectors = pd.DataFrame(np.zeros((len(self.sentences), len(self.data_corpus))), index=range(len(self.sentences)),
+                               columns=[self.data_corpus], dtype=int)
         for sentence_index in range(len(self.sentences)):
             sentence = self.sentences[sentence_index]
-            vector = pd.Series(index=vectors.columns, dtype=int)
+            vector = pd.Series(np.zeros((len(vectors.columns))), index=vectors.columns, dtype=int)
             for word in sentence.split(self.delimiter):
                 if vector[word] == 0 or method != 'binary':
                     vector[word] += 1
